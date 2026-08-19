@@ -189,7 +189,10 @@ class AI:
             try:
                 provider_for_rag = provider if provider == "local" else "ollama"
                 return self.rag_service.query_with_rag(
-                    prompt, provider_for_rag, rag_source
+                    prompt,
+                    provider_for_rag,
+                    rag_source,
+                    model=model  # <--- PASAMOS EL MODELO
                 )
             except Exception as e:
                 logger.error(f"RAG query failed: {e}, falling back to regular query")
