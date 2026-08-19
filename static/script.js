@@ -1,3 +1,22 @@
+const providerSelect = document.getElementById('provider');
+const modelInput = document.getElementById('model');
+
+const defaultModels = {
+    'openrouter': 'meta-llama/llama-3-8b-instruct:free',
+    'local': 'qwen2.5-coder:7b',
+    'groq': 'llama3-70b-8192',
+    'huggingface': 'google/flan-t5-base'
+};
+
+providerSelect.addEventListener('change', function() {
+    const selectedProvider = this.value;
+    if (defaultModels[selectedProvider]) {
+        modelInput.value = defaultModels[selectedProvider];
+    } else {
+        modelInput.value = '';
+    }
+});
+
 document.getElementById('aiForm').addEventListener('submit', async function(e) {
     e.preventDefault();
 
