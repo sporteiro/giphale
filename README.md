@@ -1,0 +1,2 @@
+# giphale
+Agentic AI tool
