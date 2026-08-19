@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Test Interface</title>
+</head>
+<body>
+    <h1>AI Query Tester</h1>
+    <form id="aiForm">
+        <label for="prompt">Prompt:</label><br>
+        <textarea id="prompt" required>Hola, ¿cómo estás?</textarea><br>
+
+        <label for="provider">Provider:</label>
+        <select id="provider">
+            <option value="">default</option>
+            <option value="openrouter">openrouter</option>
+            <option value="local">local (Ollama)</option>
+            <option value="groq">groq</option>
+            <option value="huggingface">huggingface</option>
+        </select><br>
+
+        <label for="model">Model (optional):</label>
+        <input id="model" placeholder="e.g. qwen2.5-coder:7b"><br>
+
+        <button type="submit">Send</button>
+    </form>
+
+    <div id="response">Respuesta aparecerá aquí...</div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
