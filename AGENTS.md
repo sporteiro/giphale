@@ -20,6 +20,7 @@
 - Use type hints where appropriate
 - Write meaningful commit messages
 - Add logging for debugging and monitoring
+- Imports must be at the beginning of files, never inside try-catch blocks
 
 ## Testing Guidelines
 

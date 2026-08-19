@@ -3,10 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Test Interface</title>
+    <title>GIPHALE</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <h1>AI Query Tester</h1>
+    <button id="themeToggle">Dark Mode</button>
+
+    <h1>GIPHALE</h1>
     <form id="aiForm">
         <label for="prompt">Prompt:</label><br>
         <textarea id="prompt" required>Hola, ¿cómo estás?</textarea><br>
@@ -22,6 +25,17 @@
 
         <label for="model">Model (optional):</label>
         <input id="model" placeholder="e.g. qwen2.5-coder:7b"><br>
+
+        <label for="useRag">
+            <input type="checkbox" id="useRag"> USE RAG
+        </label><br>
+
+        <div id="ragSection" style="display: none;">
+            <label for="ragSource">RAG Source:</label>
+            <select id="ragSource">
+                <option value="">Select a source...</option>
+            </select>
+        </div>
 
         <button type="submit">Send</button>
     </form>
