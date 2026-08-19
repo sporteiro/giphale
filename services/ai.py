@@ -1,104 +1,173 @@
 import os
+import logging
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Dict, Any
 from dotenv import load_dotenv
 import requests
 
 load_dotenv()
 
-class AI:
-    def __init__(self):
-        self.default_model = os.getenv('LLM_MODEL')
-        self.openrouter_url = os.getenv('OPENROUTER_URL', 'https://openrouter.ai/api/v1/chat/completions')
-        self.openrouter_key = os.getenv('OPENROUTER_API_KEY')
-        self.ollama_url = os.getenv('OLLAMA_URL', 'http://localhost:11434/v1/chat/completions')
-        self.groq_url = os.getenv('GROQ_URL', 'https://api.groq.com/openai/v1/chat/completions')
-        self.groq_key = os.getenv('GROQ_API_KEY')
-        self.hf_url = os.getenv('HF_URL', 'https://api-inference.huggingface.co/models')
-        self.hf_key = os.getenv('HF_TOKEN')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-    def ask_ai(self, prompt: str, provider: str = None, model: str = None) -> str:
-        provider = provider or 'openrouter'
-        model = model or self.default_model
 
-        if provider == 'openrouter':
-            return self._ask_openrouter(prompt, model)
-        elif provider == 'local':
-            if not model:
-                raise ValueError("Model is required for local provider")
-            return self._ask_ollama(prompt, model)
-        elif provider == 'groq':
-            return self._ask_groq(prompt, model)
-        elif provider == 'huggingface':
-            return self._ask_huggingface(prompt, model)
-        else:
-            raise ValueError(f"Unsupported provider: {provider}")
+@dataclass
+class AIProviderConfig:
+    url: str
+    api_key: str = None
+    headers: Dict[str, str] = None
+    
+    def __post_init__(self):
+        if self.headers is None:
+            self.headers = {}
 
-    def _call_ai_api(self, url: str, headers: dict, payload: dict, error_prefix: str = "API error") -> str:
+
+class AIProvider(ABC):
+    def __init__(self, config: AIProviderConfig):
+        self.config = config
+    
+    @abstractmethod
+    def build_payload(self, prompt: str, model: str) -> Dict[str, Any]:
+        pass
+    
+    @abstractmethod
+    def extract_response(self, response_data: Dict[str, Any]) -> str:
+        pass
+    
+    def call_api(self, prompt: str, model: str) -> str:
+        headers = self.config.headers.copy()
+        if self.config.api_key:
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
+        
+        payload = self.build_payload(prompt, model)
+        
+        logger.info(f"Calling API: {self.config.url}")
+        logger.debug(f"Payload: {payload}")
+        
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response = requests.post(
+                self.config.url,
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+            logger.info(f"Response status: {response.status_code}")
             response.raise_for_status()
-            return response.json()["choices"][0]["message"]["content"]
+            result = self.extract_response(response.json())
+            logger.info(f"API call successful")
+            return result
         except requests.exceptions.HTTPError as e:
+            logger.error(f"HTTP error: {e}, status: {response.status_code}")
             if response.status_code == 404:
-                raise RuntimeError(f"{error_prefix}: Resource not found")
-            raise RuntimeError(f"{error_prefix}: {str(e)}")
+                raise RuntimeError("Resource not found")
+            raise RuntimeError(f"API error: {str(e)}")
         except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"{error_prefix}: {str(e)}")
+            logger.error(f"Network error: {e}")
+            raise RuntimeError(f"Network error: {str(e)}")
 
-    def _ask_openrouter(self, prompt: str, model: str) -> str:
-        if not self.openrouter_key:
-            raise ValueError("OPENROUTER_API_KEY not set")
-        headers = {
-            "Authorization": f"Bearer {self.openrouter_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
+
+class OpenAICompatibleProvider(AIProvider):
+    def build_payload(self, prompt: str, model: str) -> Dict[str, Any]:
+        return {
             "model": model,
             "messages": [{"role": "user", "content": prompt}]
         }
-        return self._call_ai_api(self.openrouter_url, headers, payload, "OpenRouter error")
+    
+    def extract_response(self, response_data: Dict[str, Any]) -> str:
+        return response_data["choices"][0]["message"]["content"]
 
-    def _ask_ollama(self, prompt: str, model: str) -> str:
-        headers = {"Content-Type": "application/json"}
-        payload = {
+
+class OllamaProvider(AIProvider):
+    def build_payload(self, prompt: str, model: str) -> Dict[str, Any]:
+        return {
             "model": model,
-            "messages": [{"role": "user", "content": prompt}]
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False
         }
-        return self._call_ai_api(self.ollama_url, headers, payload, "Ollama error")
+    
+    def extract_response(self, response_data: Dict[str, Any]) -> str:
+        if "message" in response_data:
+            return response_data["message"]["content"]
+        elif "response" in response_data:
+            return response_data["response"]
+        else:
+            raise RuntimeError("Unexpected response format from Ollama")
 
-    def _ask_groq(self, prompt: str, model: str) -> str:
-        if not self.groq_key:
-            raise ValueError("GROQ_API_KEY not set")
-        headers = {
-            "Authorization": f"Bearer {self.groq_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}]
-        }
-        return self._call_ai_api(self.groq_url, headers, payload, "Groq error")
 
-    def _ask_huggingface(self, prompt: str, model: str) -> str:
-        if not self.hf_key:
-            raise ValueError("HF_TOKEN not set")
-        url = f"{self.hf_url}/{model}"  # Hugging Face inference API uses model in URL
-        headers = {
-            "Authorization": f"Bearer {self.hf_key}",
-            "Content-Type": "application/json"
-        }
-        # Hugging Face expects a different payload structure
-        payload = {
+class HuggingFaceProvider(AIProvider):
+    def build_payload(self, prompt: str, model: str) -> Dict[str, Any]:
+        return {
             "inputs": prompt,
             "parameters": {"return_full_text": False}
         }
-        try:
-            response = requests.post(url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            # HF returns list of dicts, we extract the generated text
-            if isinstance(data, list) and len(data) > 0 and "generated_text" in data[0]:
-                return data[0]["generated_text"]
-            else:
-                raise RuntimeError("Unexpected response format from Hugging Face")
-        except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"Hugging Face error: {str(e)}")
+    
+    def extract_response(self, response_data: Dict[str, Any]) -> str:
+        if isinstance(response_data, list) and len(response_data) > 0:
+            if "generated_text" in response_data[0]:
+                return response_data[0]["generated_text"]
+        raise RuntimeError("Unexpected response format from Hugging Face")
+
+
+class AIService:
+    def __init__(self):
+        self.default_model = os.getenv('LLM_MODEL')
+        self.providers = self._initialize_providers()
+    
+    def _initialize_providers(self) -> Dict[str, AIProvider]:
+        return {
+            'openrouter': OpenAICompatibleProvider(
+                AIProviderConfig(
+                    url=os.getenv('OPENROUTER_URL', 'https://openrouter.ai/api/v1/chat/completions'),
+                    api_key=os.getenv('OPENROUTER_API_KEY'),
+                    headers={"Content-Type": "application/json"}
+                )
+            ),
+            'local': OllamaProvider(
+                AIProviderConfig(
+                    url=os.getenv('OLLAMA_URL', 'http://localhost:11434/api/chat'),
+                    headers={"Content-Type": "application/json"}
+                )
+            ),
+            'groq': OpenAICompatibleProvider(
+                AIProviderConfig(
+                    url=os.getenv('GROQ_URL', 'https://api.groq.com/openai/v1/chat/completions'),
+                    api_key=os.getenv('GROQ_API_KEY'),
+                    headers={"Content-Type": "application/json"}
+                )
+            ),
+            'huggingface': HuggingFaceProvider(
+                AIProviderConfig(
+                    url=os.getenv('HF_URL', 'https://api-inference.huggingface.co/models'),
+                    api_key=os.getenv('HF_TOKEN'),
+                    headers={"Content-Type": "application/json"}
+                )
+            )
+        }
+    
+    def ask_ai(self, prompt: str, provider: str = None, model: str = None) -> str:
+        provider = provider or 'openrouter'
+        model = model or self.default_model
+        
+        logger.info(f"Using provider: {provider}, model: {model}")
+        
+        if provider not in self.providers:
+            raise ValueError(f"Unsupported provider: {provider}")
+        
+        if provider == 'local' and not model:
+            raise ValueError("Model is required for local provider")
+        
+        ai_provider = self.providers[provider]
+        
+        if provider == 'huggingface':
+            ai_provider.config.url = f"{ai_provider.config.url}/{model}"
+        
+        return ai_provider.call_api(prompt, model)
+
+
+class AI:
+    def __init__(self):
+        self.service = AIService()
+    
+    def ask_ai(self, prompt: str, provider: str = None, model: str = None) -> str:
+        return self.service.ask_ai(prompt, provider, model)
