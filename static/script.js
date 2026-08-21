@@ -21,16 +21,17 @@ if (savedTheme) {
 }
 
 const defaultModels = {
-    'openrouter': 'meta-llama/llama-3-8b-instruct:free',
+    'openrouter': 'openrouter/free',
     'local': 'qwen2.5-coder:7b',
-    'groq': 'llama3-70b-8192',
-    'huggingface': 'google/flan-t5-base'
+    'groq': 'allam-2-7b',
+    'huggingface': 'gpt2'
 };
 
 providerSelect.addEventListener('change', function() {
     const selectedProvider = this.value;
     if (defaultModels[selectedProvider]) {
-        modelInput.value = defaultModels[selectedProvider];
+        const modelValue = defaultModels[selectedProvider];
+        modelInput.value = Array.isArray(modelValue) ? modelValue.join(',') : modelValue;
     } else {
         modelInput.value = '';
     }
