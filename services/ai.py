@@ -45,18 +45,24 @@ class AIProvider(ABC):
 
         logger.info(f"Calling API: {self.config.url}")
         logger.debug(f"Payload: {payload}")
+        logger.debug(f"Headers: {headers}")
 
         try:
             response = requests.post(
                 self.config.url, headers=headers, json=payload, timeout=30
             )
             logger.info(f"Response status: {response.status_code}")
+
+            if response.status_code != 200:
+                logger.error(f"Response body: {response.text}")
+
             response.raise_for_status()
             result = self.extract_response(response.json())
             logger.info("API call successful")
             return result
         except requests.exceptions.HTTPError as e:
             logger.error(f"HTTP error: {e}, status: {response.status_code}")
+            logger.error(f"Response body: {response.text}")
             if response.status_code == 404:
                 raise RuntimeError("Resource not found")
             raise RuntimeError(f"API error: {str(e)}")
@@ -67,7 +73,17 @@ class AIProvider(ABC):
 
 class OpenAICompatibleProvider(AIProvider):
     def build_payload(self, prompt: str, model: str) -> Dict[str, Any]:
-        return {"model": model, "messages": [{"role": "user", "content": prompt}]}
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+
+        # Add models array for OpenRouter fallback support
+        if isinstance(model, list):
+            payload["models"] = model
+            payload["model"] = model[0]  # Primary model
+
+        return payload
 
     def extract_response(self, response_data: Dict[str, Any]) -> str:
         return response_data["choices"][0]["message"]["content"]
@@ -115,7 +131,11 @@ class AIService:
                         "https://openrouter.ai/api/v1/chat/completions",
                     ),
                     api_key=os.getenv("OPENROUTER_API_KEY"),
-                    headers={"Content-Type": "application/json"},
+                    headers={
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "http://localhost:8000",
+                        "X-Title": "Giphale",
+                    },
                 )
             ),
             "local": OllamaProvider(
@@ -127,7 +147,8 @@ class AIService:
             "groq": OpenAICompatibleProvider(
                 AIProviderConfig(
                     url=os.getenv(
-                        "GROQ_URL", "https://api.groq.com/openai/v1/chat/completions"
+                        "GROQ_URL",
+                        "https://api.groq.com/openai/v1/chat/completions",
                     ),
                     api_key=os.getenv("GROQ_API_KEY"),
                     headers={"Content-Type": "application/json"},
@@ -189,10 +210,7 @@ class AI:
             try:
                 provider_for_rag = provider if provider == "local" else "ollama"
                 return self.rag_service.query_with_rag(
-                    prompt,
-                    provider_for_rag,
-                    rag_source,
-                    model=model  # <--- PASAMOS EL MODELO
+                    prompt, provider_for_rag, rag_source, model=model
                 )
             except Exception as e:
                 logger.error(f"RAG query failed: {e}, falling back to regular query")

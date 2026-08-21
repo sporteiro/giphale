@@ -5,11 +5,11 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_chroma import Chroma
 from langchain_community.document_loaders import TextLoader
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.llms import Ollama
-from langchain_chroma import Chroma
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
 logging.basicConfig(level=logging.INFO)
@@ -46,13 +46,13 @@ class OllamaRAGProvider(RAGProvider):
             text_content = []
             for page in reader.pages:
                 text_content.append(page.extract_text())
-            
+
             text = "\n".join(text_content)
             output_path = output_dir / f"{pdf_path.stem}.txt"
-            
+
             with open(output_path, "w", encoding="utf-8") as f:
                 f.write(text)
-            
+
             logger.info(f"Converted {pdf_path.name} to {output_path.name}")
             return output_path
         except Exception as e:
@@ -72,13 +72,13 @@ class OllamaRAGProvider(RAGProvider):
     def _process_files_to_text(self, source_path: str) -> Optional[Path]:
         source_dir = Path(source_path)
         temp_dir = source_dir / ".temp_text"
-        
+
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
         temp_dir.mkdir(exist_ok=True)
-        
+
         processed_files = []
-        
+
         for file_path in source_dir.iterdir():
             if file_path.is_file() and not file_path.name.startswith("."):
                 if file_path.suffix.lower() == ".pdf":
@@ -93,7 +93,7 @@ class OllamaRAGProvider(RAGProvider):
                     txt_path = temp_dir / file_path.name
                     shutil.copy2(file_path, txt_path)
                     processed_files.append(txt_path)
-        
+
         logger.info(f"Processed {len(processed_files)} files to text format")
         return temp_dir if processed_files else None
 
@@ -107,7 +107,7 @@ class OllamaRAGProvider(RAGProvider):
             return documents
 
         text_dir = self._process_files_to_text(source_path)
-        
+
         if not text_dir:
             logger.warning("No text files to process")
             return documents
@@ -159,15 +159,16 @@ class OllamaRAGProvider(RAGProvider):
 
         try:
             retrieved_docs = retriever.invoke(query)
-            
+
             if not retrieved_docs:
                 logger.warning("No documents retrieved, falling back to direct query")
                 return self._direct_query(query)
-            
+
             context = "\n\n".join([doc.page_content for doc in retrieved_docs])
-            
-            prompt = f"Answer the question based on the following context:\n\n{context}\n\nQuestion: {query}"
-            
+
+            prompt = f"Answer the question based \
+            on the following context:\n\n{context}\n\nQuestion: {query}"
+
             llm = Ollama(base_url=self.ollama_url, model=self.model)
             response = llm.invoke(prompt)
 
@@ -211,12 +212,16 @@ class RAGService:
     def get_provider(self, provider_name: str) -> RAGProvider:
         return self.providers.get(provider_name)
 
-    def query_with_rag(self, query: str, provider: str, rag_source: str, model: str = None) -> str:
-        logger.info(f"RAG query - Provider: {provider}, Source: {rag_source}, Model: {model}")
+    def query_with_rag(
+        self, query: str, provider: str, rag_source: str, model: str = None
+    ) -> str:
+        logger.info(
+            f"RAG query - Provider: {provider}, Source: {rag_source}, Model: {model}"
+        )
 
-        # Si se pasa un modelo, crear un provider temporal con ese modelo
         if model:
             from .rag import OllamaRAGProvider
+
             ollama_config = {
                 "model": model,
                 "ollama_url": os.getenv("OLLAMA_URL", "http://localhost:11434"),
