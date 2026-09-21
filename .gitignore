@@ -222,3 +222,4 @@ __marimo__/
 
 # RAG sources
 rag_sources/
+.aider*

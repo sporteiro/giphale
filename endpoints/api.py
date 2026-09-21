@@ -48,8 +48,6 @@ def get_info(request: PromptRequest = Depends()) -> dict:
 def post_ai_query(request: PromptRequest) -> dict:
     ai = AI()
     try:
-        # Parse model string to array if it contains commas
-        # (for OpenRouter fallback)
         model = request.model
         if model and "," in model and request.provider == "openrouter":
             model = [m.strip() for m in model.split(",")]
