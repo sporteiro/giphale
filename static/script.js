@@ -91,7 +91,7 @@ document.getElementById('aiForm').addEventListener('submit', async function(e) {
     }
 
     const responseDiv = document.getElementById('response');
-    responseDiv.textContent = 'Cargando...';
+    responseDiv.textContent = 'Loading...';
 
     try {
         const res = await fetch('/ask_ai', {
